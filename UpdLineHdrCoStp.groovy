@@ -20,20 +20,29 @@
  *                                                             *
  ***************************************************************
  */
- 
- /*
- *Modification area - M3
- *Nbr               Date      User id          Description
- *SH001             20241001  ONKARK           Update header stop status in EXTOLN 
- *
- *
- */
- 
+
+/****************************************************************************************
+ Extension Name: EXT100MI/UpdLineHdrCoStp
+ Type: ExtendM3Transaction
+ Script Author: Onkar Kulkarni
+ Date:
+ Description:
+ * This script Update The Header Stop (HSTP) Value In Resp Order Lines in EXTOLN table
+
+ Revision History:
+ Name                    Date             Version          Description of Changes
+ Onkar Kulkarni       2024-10-01           1.0              Initial version created
+******************************************************************************************/
+
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 public class UpdLineHdrCoStp extends ExtendM3Transaction {
-    private final MIAPI mi;
-    private final LoggerAPI logger; 
-    private final DatabaseAPI database;
-    private final MICallerAPI miCaller;
+
+    private final MIAPI mi
+    private final LoggerAPI logger
+    private final DatabaseAPI database
+    private final MICallerAPI miCaller
 
     /**
      * Constructor to initialize required APIs.
@@ -44,71 +53,82 @@ public class UpdLineHdrCoStp extends ExtendM3Transaction {
      * @param miCaller MICallerAPI instance
      */
     public UpdLineHdrCoStp(MIAPI mi, LoggerAPI logger, DatabaseAPI database, MICallerAPI miCaller) {
-        this.mi = mi;
-        this.logger = logger;
-        this.database = database; 
-        this.miCaller = miCaller;
+        this.mi = mi
+        this.logger = logger
+        this.database = database
+        this.miCaller = miCaller
     }
 
     // Input variables
-    private String inORNO, inCONO, inHSTP;
-     private boolean isValidInput=true;
+    private String inORNO, inCONO, inHSTP
+    private boolean isValidInput = true
 
+    // Get the current date and time
+    DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern('yyyyMMdd')
+    int currentDate = dateFormatter.format(LocalDate.now()).toInteger()
     public void main() {
-        getApiInput();          
-        if(validateInput()){
-           updateHeaderStopInLine(); 
-        }    
+        getApiInput()
+        if (validateInput()) {
+            updateHeaderStopInLine()
+        }
     }
 
     /**
      * Method to fetch input data from API.
      */
     public void getApiInput() {
-        inCONO = mi.inData.get("CONO"); // Company code
-        inORNO = mi.inData.get("ORNO").trim(); // Order number
-        inHSTP = mi.inData.get("HSTP").trim(); // Header stop value
+        inCONO = mi.inData.get('CONO') // Company code
+        inORNO = mi.inData.get('ORNO').trim() // Order number
+        inHSTP = mi.inData.get('HSTP').trim() // Header stop value
     }
 
     /**
      * Method to update the header stop in the EXTOLN table.
      */
     public void updateHeaderStopInLine() {
-        DBAction action = database.table("EXTOLN").index("00").build();
-        DBContainer container = action.createContainer();
+        DBAction action = database.table('EXTOLN').index('00').build()
+        DBContainer container = action.createContainer()
 
         // Set parameters for the query
-        container.set("EXCONO", inCONO.toInteger());
-        container.set("EXORNO", inORNO);
+        container.set('EXCONO', inCONO.toInteger())
+        container.set('EXORNO', inORNO)
 
-        int nrOfKeys = 2; // Number of keys to lock
+        int nrOfKeys = 2 // Number of keys to lock
 
         // Read and lock the record, then update it
-        action.readAllLock(container, nrOfKeys, updateCallBack);
+        action.readAllLock(container, nrOfKeys, updateCallBack)
     }
 
     /**
      * Method to validate input fields.
      */
     private boolean validateInput() {
-        isValidInput = checkValidCompany();        // Validate company code
-         if(isValidInput==false){
-         return false;
+        isValidInput = checkValidCompany()        // Validate company code
+        if (isValidInput == false) {
+            return false
         }
-       isValidInput = checkValidOrderNumber();    // Validate order number
-         if(isValidInput==false){
-         return false;
+        isValidInput = checkValidOrderNumber()    // Validate order number
+        if (isValidInput == false) {
+            return false
         }
-        return true;
+        return true
     }
 
     /**
      * Callback for updating the EXTOLN table.
      */
-    Closure<?> updateCallBack = { LockedResult lockedResult -> 
-        lockedResult.set("EXHSTP", inHSTP.toInteger()); // Update the header stop value
-        lockedResult.update(); // Commit the changes
-    };
+    Closure<?> updateCallBack = { LockedResult lockedResult ->
+        if (lockedResult != null) {
+            int changeNumber = lockedResult.get('EXCHNO')
+            String changeId =  lockedResult.get('EXCHID')
+            changeNumber = changeNumber + 1
+            lockedResult.set('EXCHNO', changeNumber)
+            lockedResult.set('EXLMDT', currentDate)
+            lockedResult.set('EXCHID', changeId)
+            lockedResult.set('EXHSTP', inHSTP.toInteger()) // Update the header stop value
+            lockedResult.update() // Commit the changes
+        }
+    }
 
     /**
      * Validate company existence.
@@ -116,20 +136,20 @@ public class UpdLineHdrCoStp extends ExtendM3Transaction {
     public boolean checkValidCompany() {
         // Check if company code contains only numeric values
         if (!inCONO =~ /^[0-9]+$/) {
-            mi.error("Invalid Company Code: '${inCONO}'. Company code must only contain numeric values.");
-            return false;
+            mi.error("Invalid Company Code: '${inCONO}'. Company code must only contain numeric values.")
+            return false
         }
 
-        DBAction query = database.table("CMNCMP").index("00").build();
-        DBContainer container = query.getContainer();
-        container.set("JICONO", inCONO.toInteger());
+        DBAction query = database.table('CMNCMP').index('00').build()
+        DBContainer container = query.getContainer()
+        container.set('JICONO', inCONO.toInteger())
 
         // Check if the company exists in the database
         if (!query.read(container)) {
-            mi.error("Company Code '${inCONO}' not found. Please verify the company code.");
-            return false;
+            mi.error("Company Code '${inCONO}' not found. Please verify the company code.")
+            return false
         }
-        return true;
+        return true
     }
 
     /**
@@ -138,20 +158,21 @@ public class UpdLineHdrCoStp extends ExtendM3Transaction {
     public boolean checkValidOrderNumber() {
         // Check if the order number length is at least 10 characters
         if (inORNO.toString().length() < 10) {
-            mi.error("Invalid Order Number: '${inORNO}'. Order number must be at least 10 characters long.");
-            return false;
+            mi.error("Invalid Order Number: '${inORNO}'. Order number must be at least 10 characters long.")
+            return false
         }
 
-        DBAction query = database.table("OOHEAD").index("00").build();
-        DBContainer container = query.getContainer();
-        container.set("OACONO", inCONO.toInteger());
-        container.set("OAORNO", inORNO);
+        DBAction query = database.table('OOHEAD').index('00').build()
+        DBContainer container = query.getContainer()
+        container.set('OACONO', inCONO.toInteger())
+        container.set('OAORNO', inORNO)
 
         // Check if the order number exists in the database
         if (!query.read(container)) {
-            mi.error("Order Number '${inORNO}' not found for Company Code '${inCONO}'. Please verify the order number.");
-            return false;
+            mi.error("Order Number '${inORNO}' not found for Company Code '${inCONO}'. Please verify the order number.")
+            return false
         }
-        return true;
+        return true
     }
+
 }
